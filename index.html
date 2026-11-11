@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student Enrollment Form</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #eef1f6;
+    color: #1d2433;
+  }
+  .card {
+    width: 100%;
+    max-width: 560px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(20, 30, 60, .12);
+    overflow: hidden;
+  }
+  .card header {
+    background: #24427a;
+    color: #fff;
+    padding: 18px 24px;
+  }
+  .card header h1 { margin: 0; font-size: 1.3rem; }
+  .card header p { margin: 4px 0 0; font-size: .82rem; opacity: .85; }
+  form { padding: 22px 24px 24px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .field { margin-bottom: 14px; }
+  label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 5px; }
+  input, textarea {
+    width: 100%;
+    padding: 9px 11px;
+    font: inherit;
+    border: 1px solid #c3cad8;
+    border-radius: 6px;
+    background: #fff;
+    color: inherit;
+  }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #24427a;
+    box-shadow: 0 0 0 3px rgba(36, 66, 122, .18);
+  }
+  input:disabled, textarea:disabled { background: #eef0f4; color: #6a7388; cursor: not-allowed; }
+  input.invalid, textarea.invalid { border-color: #c62828; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .buttons { display: flex; gap: 10px; margin-top: 20px; }
+  button {
+    flex: 1;
+    padding: 10px 0;
+    font: inherit;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+  }
+  #btnSave { background: #2e7d32; }
+  #btnUpdate { background: #24427a; }
+  #btnReset { background: #b23b3b; }
+  button:disabled { background: #b8bfcc !important; cursor: not-allowed; }
+  #message { min-height: 1.3em; margin: 14px 0 0; font-size: .88rem; }
+  #message.error { color: #c62828; }
+  #message.ok { color: #2e7d32; }
+  #message.info { color: #24427a; }
+  #backend { margin: 6px 0 0; font-size: .75rem; color: #6a7388; }
+  @media (max-width: 480px) { .row { grid-template-columns: 1fr; gap: 0; } }
+</style>
+</head>
+<body>
+<div class="card">
+  <header>
+    <h1>Student Enrollment Form</h1>
+    <p>SCHOOL-DB &rsaquo; STUDENT-TABLE</p>
+  </header>
+
+  <form id="studentForm" autocomplete="off" novalidate>
+   <fieldset id="controls">
+    <div class="field">
+      <label for="rollNo">Roll No. <small>(primary key &mdash; type it and press Enter or Tab)</small></label>
+      <input type="text" id="rollNo" name="rollNo" placeholder="e.g. 101" maxlength="20">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" name="fullName" maxlength="100">
+      </div>
+      <div class="field">
+        <label for="studentClass">Class</label>
+        <input type="text" id="studentClass" name="studentClass" maxlength="30">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="birthDate">Birth Date</label>
+        <input type="date" id="birthDate" name="birthDate">
+      </div>
+      <div class="field">
+        <label for="enrollmentDate">Enrollment Date</label>
+        <input type="date" id="enrollmentDate" name="enrollmentDate">
+      </div>
+    </div>
+    <div class="field">
+      <label for="address">Address</label>
+      <textarea id="address" name="address" maxlength="300"></textarea>
+    </div>
+
+    <div class="buttons">
+      <button type="button" id="btnSave">Save</button>
+      <button type="button" id="btnUpdate">Update</button>
+      <button type="button" id="btnReset">Reset</button>
+    </div>
+   </fieldset>
+    <p id="message" role="status"></p>
+    <p id="backend"></p>
+  </form>
+</div>
+
+<script>
+/* ------------------------------------------------------------------
+   CONFIGURATION
+   Paste your JsonPowerDB connection token below to store the data in
+   JsonPowerDB (login2explore.com -> Tools -> Tokens).
+   While the token is empty, the form stores data in the browser's
+   localStorage so it can be tried out without an account.
+------------------------------------------------------------------- */
+const CONFIG = {
+  token: "",                                  // <-- your JPDB connection token
+  baseUrl: "http://api.login2explore.com:5577",
+  imlEndpoint: "/api/iml",                    // PUT / UPDATE
+  irlEndpoint: "/api/irl",                    // GET_BY_KEY
+  dbName: "SCHOOL-DB",
+  relName: "STUDENT-TABLE"
+};
+
+/* ----------------------- Database layer -------------------------- */
+
+// JsonPowerDB backend
+const jpdb = {
+  name: "JsonPowerDB",
+  async request(endpoint, body) {
+    const res = await fetch(CONFIG.baseUrl + endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: JSON.stringify(body)
+    });
+    const out = await res.json().catch(() => null);
+    if (!out || typeof out !== "object") {
+      throw new Error("The database sent an unreadable response (HTTP " + res.status + ")");
+    }
+    return out;
+  },
+  // Returns { recNo, record } or null when the key does not exist.
+  async getByKey(rollNo) {
+    const out = await this.request(CONFIG.irlEndpoint, {
+      token: CONFIG.token, cmd: "GET_BY_KEY",
+      dbName: CONFIG.dbName, rel: CONFIG.relName,
+      jsonStr: { rollNo: rollNo }
+    });
+    if (out.status === 400) return null;
+    if (out.status !== 200) throw new Error(out.message || "Lookup failed");
+    const data = typeof out.data === "string" ? JSON.parse(out.data) : out.data;
+    if (!data || data.rec_no == null || !data.record || typeof data.record !== "object") {
+      throw new Error("Unexpected response from the database");
+    }
+    return { recNo: data.rec_no, record: data.record };
+  },
+  async put(record) {
+    const out = await this.request(CONFIG.imlEndpoint, {
+      token: CONFIG.token, cmd: "PUT",
+      dbName: CONFIG.dbName, rel: CONFIG.relName,
+      jsonStr: record
+    });
+    if (out.status !== 200) throw new Error(out.message || "Save failed");
+  },
+  async update(recNo, record) {
+    const out = await this.request(CONFIG.imlEndpoint, {
+      token: CONFIG.token, cmd: "UPDATE",
+      dbName: CONFIG.dbName, rel: CONFIG.relName,
+      jsonStr: { [recNo]: record }
+    });
+    if (out.status !== 200) throw new Error(out.message || "Update failed");
+  }
+};
+
+// Browser localStorage backend (used when no token is configured)
+const local = {
+  name: "browser localStorage",
+  storageKey: CONFIG.dbName + "/" + CONFIG.relName,
+  // Returns a prototype-less map, so a Roll No. such as "constructor" or
+  // "__proto__" is treated as an ordinary key and never as an inherited one.
+  readAll() {
+    const all = Object.create(null);
+    try {
+      const parsed = JSON.parse(localStorage.getItem(this.storageKey));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const key of Object.keys(parsed)) all[key] = parsed[key];
+      }
+    } catch (e) { /* unreadable or corrupt storage: start empty */ }
+    return all;
+  },
+  async getByKey(rollNo) {
+    const record = this.readAll()[rollNo];
+    return record && typeof record === "object" ? { recNo: rollNo, record: record } : null;
+  },
+  async put(record) {
+    const all = this.readAll();
+    all[record.rollNo] = record;
+    localStorage.setItem(this.storageKey, JSON.stringify(all));
+  },
+  async update(recNo, record) {
+    return this.put(record);
+  }
+};
+
+const db = CONFIG.token ? jpdb : local;
+
+/* --------------------------- Form logic -------------------------- */
+
+const $ = id => document.getElementById(id);
+const rollNo = $("rollNo");
+const dataFields = ["fullName", "studentClass", "birthDate", "enrollmentDate", "address"].map($);
+const btnSave = $("btnSave"), btnUpdate = $("btnUpdate"), btnReset = $("btnReset");
+const message = $("message");
+
+let currentRecNo = null;   // record number of the row being edited (update mode)
+let lookedUpKey = null;    // roll no. the form is currently showing
+let lookupSeq = 0;         // guards against out-of-order lookups
+
+function showMessage(text, kind) {
+  message.textContent = text || "";
+  message.className = kind || "";
+}
+
+// Locks every field and button while a save or update is in flight, so the
+// form cannot be reset or edited underneath a pending database call.
+function setBusy(busy) {
+  $("controls").disabled = busy;
+}
+
+function todayIso() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+// Step 2: empty form, only Roll No. enabled, cursor on Roll No.
+function resetForm() {
+  lookupSeq++;
+  setBusy(false);
+  $("studentForm").reset();
+  currentRecNo = null;
+  lookedUpKey = null;
+  rollNo.disabled = false;
+  dataFields.forEach(f => { f.disabled = true; f.classList.remove("invalid"); });
+  rollNo.classList.remove("invalid");
+  btnSave.disabled = btnUpdate.disabled = btnReset.disabled = true;
+  rollNo.focus();
+}
+
+// Step 3: look the primary key up and switch to "new" or "edit" mode.
+async function lookupRollNo() {
+  const key = rollNo.value.trim();
+  if (!key || key === lookedUpKey) return;
+  rollNo.value = key;
+  const seq = ++lookupSeq;
+  showMessage("Checking Roll No. " + key + "...", "info");
+
+  let found;
+  try {
+    found = await db.getByKey(key);
+  } catch (err) {
+    if (seq === lookupSeq) showMessage("Database error: " + err.message, "error");
+    return;
+  }
+  if (seq !== lookupSeq) return;   // form was reset or key changed meanwhile
+
+  lookedUpKey = key;
+  dataFields.forEach(f => { f.disabled = false; f.classList.remove("invalid"); });
+  btnReset.disabled = false;
+
+  if (found) {
+    currentRecNo = found.recNo;
+    const r = found.record;
+    $("fullName").value = r.fullName || "";
+    $("studentClass").value = r.studentClass || "";
+    $("birthDate").value = r.birthDate || "";
+    $("enrollmentDate").value = r.enrollmentDate || "";
+    $("address").value = r.address || "";
+    rollNo.disabled = true;
+    btnSave.disabled = true;
+    btnUpdate.disabled = false;
+    showMessage("Roll No. " + key + " found. Edit the details and click Update.", "info");
+  } else {
+    currentRecNo = null;
+    dataFields.forEach(f => { f.value = ""; });
+    btnSave.disabled = false;
+    btnUpdate.disabled = true;
+    showMessage("New Roll No. Fill in the details and click Save.", "info");
+  }
+  $("fullName").focus();
+}
+
+// Returns the record object, or null (and focuses the offending field) if invalid.
+function validateAndCollect() {
+  const all = [rollNo].concat(dataFields);
+  all.forEach(f => f.classList.remove("invalid"));
+
+  for (const f of all) {
+    if (!f.value.trim()) {
+      f.classList.add("invalid");
+      const label = document.querySelector('label[for="' + f.id + '"]').firstChild.textContent.trim();
+      showMessage(label + " is required.", "error");
+      if (!f.disabled) f.focus();
+      return null;
+    }
+  }
+  for (const f of [$("birthDate"), $("enrollmentDate")]) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.value)) {
+      f.classList.add("invalid");
+      showMessage("Enter a valid date with a four-digit year.", "error");
+      f.focus();
+      return null;
+    }
+  }
+  if ($("birthDate").value > todayIso()) {
+    $("birthDate").classList.add("invalid");
+    showMessage("Birth Date cannot be in the future.", "error");
+    $("birthDate").focus();
+    return null;
+  }
+  if ($("enrollmentDate").value < $("birthDate").value) {
+    $("enrollmentDate").classList.add("invalid");
+    showMessage("Enrollment Date cannot be before Birth Date.", "error");
+    $("enrollmentDate").focus();
+    return null;
+  }
+  return {
+    rollNo: rollNo.value.trim(),
+    fullName: $("fullName").value.trim(),
+    studentClass: $("studentClass").value.trim(),
+    birthDate: $("birthDate").value,
+    address: $("address").value.trim(),
+    enrollmentDate: $("enrollmentDate").value
+  };
+}
+
+async function saveRecord() {
+  const record = validateAndCollect();
+  if (!record) return;
+  setBusy(true);
+  showMessage("Saving...", "info");
+  let duplicate = false;
+  try {
+    // Re-check so a row added since the lookup is never overwritten.
+    if (await db.getByKey(record.rollNo)) duplicate = true;
+    else await db.put(record);
+  } catch (err) {
+    setBusy(false);
+    showMessage("Could not save: " + err.message, "error");
+    return;
+  }
+  setBusy(false);
+  if (duplicate) {
+    lookedUpKey = null;
+    await lookupRollNo();
+    showMessage("Roll No. " + record.rollNo + " already exists. Its saved details are shown; use Update to change them.", "error");
+    return;
+  }
+  resetForm();
+  showMessage("Roll No. " + record.rollNo + " saved.", "ok");
+}
+
+async function updateRecord() {
+  const record = validateAndCollect();
+  if (!record) return;
+  setBusy(true);
+  showMessage("Updating...", "info");
+  try {
+    await db.update(currentRecNo, record);
+  } catch (err) {
+    setBusy(false);
+    showMessage("Could not update: " + err.message, "error");
+    return;
+  }
+  resetForm();
+  showMessage("Roll No. " + record.rollNo + " updated.", "ok");
+}
+
+/* ----------------------------- Events ---------------------------- */
+
+rollNo.addEventListener("change", lookupRollNo);
+rollNo.addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); lookupRollNo(); }
+});
+// Editing the Roll No. after a lookup: lock the form until it is re-checked.
+rollNo.addEventListener("input", () => {
+  if (lookedUpKey === null) return;
+  lookupSeq++;
+  lookedUpKey = null;
+  dataFields.forEach(f => { f.disabled = true; });
+  btnSave.disabled = btnUpdate.disabled = true;
+  showMessage("");
+});
+$("studentForm").addEventListener("submit", e => e.preventDefault());
+btnSave.addEventListener("click", saveRecord);
+btnUpdate.addEventListener("click", updateRecord);
+btnReset.addEventListener("click", () => { resetForm(); showMessage(""); });
+
+$("backend").textContent = "Storage: " + db.name;
+resetForm();
+</script>
+</body>
+</html>
